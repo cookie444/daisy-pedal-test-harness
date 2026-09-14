@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env
+
+# Test / build output
+build/
+build-*/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+artifacts/
+*.wav
+!captures/*.wav
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

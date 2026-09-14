@@ -1,0 +1,87 @@
+# Daisy Pod hardware-in-the-loop rig configuration.
+#
+# Thresholds are the contract: a firmware change that moves any measured value
+# outside its window fails CI. Tolerances are deliberately loose enough to cover
+# converter/interface variation but tight enough to catch real regressions
+# (see tests/unit/test_fault_detection.py for the injected faults they catch).
+
+rig:
+  sample_rate: 48000
+  block_size: 48          # Daisy default audio block size
+  pre_roll_s: 0.25        # silence before the stimulus (noise-floor reference)
+  post_roll_s: 0.25       # silence after the stimulus
+  stimulus_level_dbfs: -12.0
+
+# Pedal state applied before each capture. Delay and tap values are chosen to be
+# an exact whole number of samples at 48 kHz so the rig measures the pedal, not
+# the fractional-delay interpolator.
+pedal:
+  delay_ms: 375.0         # 18000 samples @ 48k
+  tap_interval_ms: 375.0  # tap tempo must produce the same delay as the knob
+  feedback: 0.55          # -5.19 dB per repeat
+  mix: 0.5
+  tone_hz: null           # repeat damping filter; null = bypass (clean decay math)
+  drive: 0.0
+  stutter_slice_ms: 125.0 # 6000 samples @ 48k
+  stutter_repeats: 4
+  stutter_trigger_s: 0.6  # trigger time after the start of the capture
+
+stimulus:
+  impulse_tail_s: 5.0     # long enough for 60 dB of repeat decay
+  sine_freq_hz: 1000.0
+  sine_duration_s: 1.5      # must outlast pre-roll + delay so steady state is analysable
+  sweep_f0_hz: 20.0
+  sweep_f1_hz: 20000.0
+  sweep_duration_s: 2.0
+  noise_duration_s: 2.0
+  silence_duration_s: 1.0
+
+thresholds:
+  # --- delay -----------------------------------------------------------------
+  delay_time_ms: {tol_pct: 2.0, unit: "ms", description: "knob delay vs measured repeat spacing"}
+  tap_delay_ms: {tol_pct: 3.0, unit: "ms", description: "tap-tempo interval vs measured repeat spacing"}
+  processing_latency_ms: {upper: 3.0, unit: "ms", description: "added latency vs bypassed path"}
+  # --- repeats ---------------------------------------------------------------
+  decay_db_per_repeat: {tol_abs: 1.5, unit: "dB", description: "repeat-to-repeat level drop vs 20*log10(feedback)"}
+  decay_time_ms: {tol_pct: 25.0, unit: "ms", description: "time for repeats to fall 60 dB"}
+  # --- distortion ------------------------------------------------------------
+  thd_pct: {upper: 1.0, unit: "%", description: "THD at 1 kHz, -12 dBFS"}
+  thd_n_pct: {upper: 2.0, unit: "%", description: "THD+N at 1 kHz, -12 dBFS"}
+  snr_db: {lower: 60.0, unit: "dB", description: "signal to noise+distortion at 1 kHz"}
+  # --- frequency response ----------------------------------------------------
+  gain_1khz_db: {tol_abs: 1.0, unit: "dB", description: "unity-gain check at 1 kHz"}
+  fr_ripple_db: {upper: 3.0, unit: "dB", description: "peak-to-peak ripple, 100 Hz - 10 kHz"}
+  fr_corner_low_hz: {upper: 60.0, unit: "Hz", description: "-3 dB low corner"}
+  fr_corner_high_hz: {lower: 12000.0, unit: "Hz", description: "-3 dB high corner"}
+  # --- stutter ---------------------------------------------------------------
+  stutter_slice_ms: {tol_pct: 5.0, unit: "ms", description: "slice length from autocorrelation"}
+  stutter_gate_ms: {tol_pct: 10.0, unit: "ms", description: "total stutter gate = slice x repeats"}
+  stutter_repeats: {tol_abs: 0.35, unit: "reps", description: "gate length / slice length is integral"}
+  # --- noise -----------------------------------------------------------------
+  noise_floor_dbfs: {upper: -80.0, unit: "dBFS", description: "output noise with a silent input"}
+
+# Fault injection (simulator only). Non-zero values simulate a firmware
+# regression so the rig can be proven to fail; CI keeps these at zero.
+faults:
+  delay_drift_pct: 0.0
+  decay_error_pct: 0.0
+  thd_add_pct: 0.0
+  noise_floor_dbfs: -96.0
+  stutter_slice_error_pct: 0.0
+  latency_extra_ms: 0.0
+  high_corner_hz: 21000.0
+
+audio:
+  input_device: null      # null = system default; name or index otherwise
+  output_device: null
+  input_channel: 1        # 1-based
+  output_channel: 1
+  output_gain_db: -12.0
+  input_gain_db: 0.0
+  latency: "low"
+  settle_s: 0.35          # discarded before the capture starts
+  timeout_s: 120
+  retries: 2
+
+plugins:
+  serial: {port: null, baudrate: 115200}
